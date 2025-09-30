@@ -10,27 +10,31 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from data_processor import DataProcessor
 from calculations import MetricsCalculator
 
-# Cache the data processing functions
-@st.cache_data
-def process_files(transaction_file, sp_file, sb_file, sd_file):
+# Cache the data processing functions with hash_funcs to avoid conflicts
+@st.cache_data(show_spinner=False, max_entries=10)
+def process_files(_transaction_bytes, _sp_bytes, _sb_bytes, _sd_bytes):
     """Process all files and cache the result"""
     data_processor = DataProcessor()
     
     # Process data
-    transaction_df = data_processor.process_transaction_data(transaction_file)
-    campaign_df = data_processor.process_campaign_data(sp_file, sb_file, sd_file)
+    transaction_df = data_processor.process_transaction_data(_transaction_bytes)
+    campaign_df = data_processor.process_campaign_data(_sp_bytes, _sb_bytes, _sd_bytes)
     combined_data = data_processor.combine_data(transaction_df, campaign_df)
     
     return combined_data
 
 def main():
     st.set_page_config(
-        page_title="Prime Day Analysis",
+        page_title="BrandTogether Prime Day Analysis",
         page_icon="📊",
         layout="wide"
     )
     
-    st.title("📊 Amazon Data Analysis")
+    st.title("📊 Brand Together Prime Day Analysis")
+    
+    # Initialize session state for user isolation
+    if 'processed_data' not in st.session_state:
+        st.session_state.processed_data = None
     
     # Initialize calculator
     calculator = MetricsCalculator()
@@ -51,13 +55,19 @@ def main():
     
     if all([transaction_file, sp_file, sb_file, sd_file]):
         try:
-            # Process files (cached - only runs once per file set)
+            # Read file bytes
+            transaction_bytes = transaction_file.read()
+            sp_bytes = sp_file.read()
+            sb_bytes = sb_file.read()
+            sd_bytes = sd_file.read()
+            
+            # Process files (cached - only runs once per unique file set)
             with st.spinner("Processing files... This may take a moment for large files."):
                 combined_data = process_files(
-                    transaction_file.read(),
-                    sp_file.read(),
-                    sb_file.read(),
-                    sd_file.read()
+                    transaction_bytes,
+                    sp_bytes,
+                    sb_bytes,
+                    sd_bytes
                 )
             
             if not combined_data.empty:
@@ -116,11 +126,11 @@ def main():
                 # Apply color coding based on selected dates
                 def color_columns(col):
                     if col.name in lead_in_dates:
-                        return ['background-color: #90EE90'] * len(col)  # Light green
+                        return ['background-color: #87CEEB'] * len(col)  # Sky blue
                     elif col.name in discount_dates:
-                        return ['background-color: #FFD700'] * len(col)  # Gold/Yellow
+                        return ['background-color: #4682B4'] * len(col)  # Steel blue
                     elif col.name in lead_out_dates:
-                        return ['background-color: #FFB6C1'] * len(col)  # Light red/pink
+                        return ['background-color: #00008B'] * len(col)  # Dark blue
                     else:
                         return [''] * len(col)
                 
@@ -131,10 +141,17 @@ def main():
                 # Display filtered tables if dates are selected
                 if lead_in_dates:
                     st.header("📊 Lead In Period")
-                    lead_in_table = daily_table[lead_in_dates]
+                    lead_in_table = daily_table[lead_in_dates].copy()
                     
-                    # Apply green color to this table
-                    styled_lead_in = lead_in_table.style.set_properties(**{'background-color': '#90EE90'})
+                    # Calculate summary and average rows
+                    period_data = combined_data[combined_data['date'].isin(lead_in_dates)]
+                    summary = calculator.calculate_summary_row(period_data)
+                    average = calculator.calculate_average_row(period_data)
+                    lead_in_table['TOTAL'] = summary
+                    lead_in_table['AVERAGE'] = average
+                    
+                    # Apply sky blue color to this table
+                    styled_lead_in = lead_in_table.style.set_properties(**{'background-color': '#87CEEB'})
                     st.dataframe(styled_lead_in, use_container_width=True)
                     
                     # Download button
@@ -149,10 +166,17 @@ def main():
                 
                 if discount_dates:
                     st.header("📊 Discount Dates Period")
-                    discount_table = daily_table[discount_dates]
+                    discount_table = daily_table[discount_dates].copy()
                     
-                    # Apply yellow color to this table
-                    styled_discount = discount_table.style.set_properties(**{'background-color': '#FFD700'})
+                    # Calculate summary and average rows
+                    period_data = combined_data[combined_data['date'].isin(discount_dates)]
+                    summary = calculator.calculate_summary_row(period_data)
+                    average = calculator.calculate_average_row(period_data)
+                    discount_table['TOTAL'] = summary
+                    discount_table['AVERAGE'] = average
+                    
+                    # Apply steel blue color to this table
+                    styled_discount = discount_table.style.set_properties(**{'background-color': '#4682B4', 'color': 'white'})
                     st.dataframe(styled_discount, use_container_width=True)
                     
                     # Download button
@@ -167,10 +191,17 @@ def main():
                 
                 if lead_out_dates:
                     st.header("📊 Lead Out Period")
-                    lead_out_table = daily_table[lead_out_dates]
+                    lead_out_table = daily_table[lead_out_dates].copy()
                     
-                    # Apply red color to this table
-                    styled_lead_out = lead_out_table.style.set_properties(**{'background-color': '#FFB6C1'})
+                    # Calculate summary and average rows
+                    period_data = combined_data[combined_data['date'].isin(lead_out_dates)]
+                    summary = calculator.calculate_summary_row(period_data)
+                    average = calculator.calculate_average_row(period_data)
+                    lead_out_table['TOTAL'] = summary
+                    lead_out_table['AVERAGE'] = average
+                    
+                    # Apply dark blue color to this table
+                    styled_lead_out = lead_out_table.style.set_properties(**{'background-color': '#00008B', 'color': 'white'})
                     st.dataframe(styled_lead_out, use_container_width=True)
                     
                     # Download button
@@ -182,6 +213,54 @@ def main():
                         mime="text/csv",
                         key="download_lead_out"
                     )
+                
+                # Display Lift Analysis if at least 2 periods are selected
+                if sum([bool(lead_in_dates), bool(discount_dates), bool(lead_out_dates)]) >= 2:
+                    st.header("📈 Lift Analysis")
+                    
+                    # Collect raw average summaries
+                    summaries_raw = {}
+                    if lead_in_dates:
+                        period_data = combined_data[combined_data['date'].isin(lead_in_dates)]
+                        summaries_raw['Lead In'] = calculator.calculate_average_row_raw(period_data)
+                    if discount_dates:
+                        period_data = combined_data[combined_data['date'].isin(discount_dates)]
+                        summaries_raw['Discount'] = calculator.calculate_average_row_raw(period_data)
+                    if lead_out_dates:
+                        period_data = combined_data[combined_data['date'].isin(lead_out_dates)]
+                        summaries_raw['Lead Out'] = calculator.calculate_average_row_raw(period_data)
+                    
+                    # Calculate lift
+                    lift_table = calculator.calculate_lift(summaries_raw)
+                    
+                    if not lift_table.empty:
+                        # Apply color styling to lift table
+                        def color_lift_values(val):
+                            """Color positive values green and negative values red"""
+                            if isinstance(val, str) and val != "N/A":
+                                # Extract the numeric value
+                                try:
+                                    numeric_val = float(val.replace('%', '').replace('+', ''))
+                                    if numeric_val > 0:
+                                        return 'background-color: #28a745'  # green
+                                    elif numeric_val < 0:
+                                        return 'background-color: #dc3545'  # red
+                                except:
+                                    pass
+                            return ''
+                        
+                        styled_lift = lift_table.style.applymap(color_lift_values)
+                        st.dataframe(styled_lift, use_container_width=True)
+                        
+                        # Download button for lift analysis
+                        csv = lift_table.to_csv()
+                        st.download_button(
+                            label="📄 Download Lift Analysis CSV",
+                            data=csv,
+                            file_name=f"lift_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv",
+                            key="download_lift"
+                        )
         
         except Exception as e:
             st.error(f"Error processing data: {str(e)}")
