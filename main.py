@@ -12,7 +12,7 @@ from calculations import MetricsCalculator
 
 # Cache the data processing functions with hash_funcs to avoid conflicts
 @st.cache_data(show_spinner=False, max_entries=10)
-def process_files(_transaction_bytes, _sp_bytes, _sb_bytes, _sd_bytes):
+def process_files(_transaction_bytes, _sp_bytes, _sb_bytes, _sd_bytes, _file_hash):
     """Process all files and cache the result"""
     data_processor = DataProcessor()
     
@@ -31,6 +31,13 @@ def main():
     )
     
     st.title("📊 Brand Together Prime Day Analysis")
+    
+    # Add a clear cache button
+    col1, col2 = st.columns([11, 1])
+    with col2:
+        if st.button("Clear Cache"):
+            st.cache_data.clear()
+            st.rerun()
     
     # Initialize session state for user isolation
     if 'processed_data' not in st.session_state:
@@ -55,11 +62,23 @@ def main():
     
     if all([transaction_file, sp_file, sb_file, sd_file]):
         try:
+            # Reset file pointers to the beginning
+            transaction_file.seek(0)
+            sp_file.seek(0)
+            sb_file.seek(0)
+            sd_file.seek(0)
+            
             # Read file bytes
             transaction_bytes = transaction_file.read()
             sp_bytes = sp_file.read()
             sb_bytes = sb_file.read()
             sd_bytes = sd_file.read()
+            
+            # Create a hash of the file contents to use as cache key
+            import hashlib
+            file_hash = hashlib.md5(
+                transaction_bytes + sp_bytes + sb_bytes + sd_bytes
+            ).hexdigest()
             
             # Process files (cached - only runs once per unique file set)
             with st.spinner("Processing files... This may take a moment for large files."):
@@ -67,7 +86,8 @@ def main():
                     transaction_bytes,
                     sp_bytes,
                     sb_bytes,
-                    sd_bytes
+                    sd_bytes,
+                    _file_hash=file_hash
                 )
             
             if not combined_data.empty:
@@ -242,9 +262,9 @@ def main():
                                 try:
                                     numeric_val = float(val.replace('%', '').replace('+', ''))
                                     if numeric_val > 0:
-                                        return 'background-color: #28a745'  # green
+                                        return 'background-color: #28a745'  # Darker green
                                     elif numeric_val < 0:
-                                        return 'background-color: #dc3545'  # red
+                                        return 'background-color: #dc3545'  # Darker red
                                 except:
                                     pass
                             return ''
