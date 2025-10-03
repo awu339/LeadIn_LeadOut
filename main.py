@@ -26,14 +26,14 @@ def process_files(_transaction_bytes, _sp_bytes, _sb_bytes, _sd_bytes, _file_has
 def main():
     st.set_page_config(
         page_title="BrandTogether Prime Day Analysis",
-        page_icon="📊",
+        page_icon="bhutan",
         layout="wide"
     )
     
-    st.title("📊 Brand Together Prime Day Analysis")
+    st.title("Brand Together Prime Day Analysis")
     
     # Add a clear cache button
-    col1, col2 = st.columns([11, 1])
+    col1, col2 = st.columns([12, 1])
     with col2:
         if st.button("Clear Cache"):
             st.cache_data.clear()
@@ -113,31 +113,123 @@ def main():
                 st.header("📅 Select Date Ranges")
                 
                 available_dates = sorted(combined_data['date'].unique())
+                min_date = min(available_dates)
+                max_date = max(available_dates)
                 
+                # Create columns for the main periods
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
                     st.subheader("Lead In")
-                    lead_in_dates = st.multiselect(
-                        "Select Lead In dates:",
-                        options=available_dates,
-                        key="lead_in"
-                    )
+                    use_range_lead_in = st.checkbox("Use date range selector", key="range_lead_in")
+                    if use_range_lead_in:
+                        lead_in_range = st.date_input(
+                            "Select Lead In range:",
+                            value=[],
+                            min_value=min_date,
+                            max_value=max_date,
+                            key="lead_in_range"
+                        )
+                        if lead_in_range:
+                            if isinstance(lead_in_range, (list, tuple)) and len(lead_in_range) == 2:
+                                lead_in_dates = [d for d in available_dates if lead_in_range[0] <= d <= lead_in_range[1]]
+                            else:
+                                lead_in_dates = [lead_in_range] if lead_in_range in available_dates else []
+                        else:
+                            lead_in_dates = []
+                    else:
+                        lead_in_dates = st.multiselect(
+                            "Select Lead In dates:",
+                            options=available_dates,
+                            key="lead_in"
+                        )
                 
                 with col2:
                     st.subheader("Discount Dates")
-                    discount_dates = st.multiselect(
-                        "Select Discount dates:",
-                        options=available_dates,
-                        key="discount"
-                    )
+                    use_range_discount = st.checkbox("Use date range selector", key="range_discount")
+                    if use_range_discount:
+                        discount_range = st.date_input(
+                            "Select Discount range:",
+                            value=[],
+                            min_value=min_date,
+                            max_value=max_date,
+                            key="discount_range"
+                        )
+                        if discount_range:
+                            if isinstance(discount_range, (list, tuple)) and len(discount_range) == 2:
+                                discount_dates = [d for d in available_dates if discount_range[0] <= d <= discount_range[1]]
+                            else:
+                                discount_dates = [discount_range] if discount_range in available_dates else []
+                        else:
+                            discount_dates = []
+                    else:
+                        discount_dates = st.multiselect(
+                            "Select Discount dates:",
+                            options=available_dates,
+                            key="discount"
+                        )
                 
                 with col3:
                     st.subheader("Lead Out")
-                    lead_out_dates = st.multiselect(
-                        "Select Lead Out dates:",
+                    use_range_lead_out = st.checkbox("Use date range selector", key="range_lead_out")
+                    if use_range_lead_out:
+                        lead_out_range = st.date_input(
+                            "Select Lead Out range:",
+                            value=[],
+                            min_value=min_date,
+                            max_value=max_date,
+                            key="lead_out_range"
+                        )
+                        if lead_out_range:
+                            if isinstance(lead_out_range, (list, tuple)) and len(lead_out_range) == 2:
+                                lead_out_dates = [d for d in available_dates if lead_out_range[0] <= d <= lead_out_range[1]]
+                            else:
+                                lead_out_dates = [lead_out_range] if lead_out_range in available_dates else []
+                        else:
+                            lead_out_dates = []
+                    else:
+                        lead_out_dates = st.multiselect(
+                            "Select Lead Out dates:",
+                            options=available_dates,
+                            key="lead_out"
+                        )
+                
+                # Calculate default Before Lead In and After Lead Out dates
+                before_lead_in_default = []
+                after_lead_out_default = []
+                
+                if lead_in_dates:
+                    first_lead_in = min(lead_in_dates)
+                    before_lead_in_default = [d for d in available_dates if d < first_lead_in]
+                
+                if lead_out_dates:
+                    last_lead_out = max(lead_out_dates)
+                    after_lead_out_default = [d for d in available_dates if d > last_lead_out]
+                
+                # Add Before/After sections
+                st.divider()
+                st.subheader("📊 Baseline Comparison Periods")
+                
+                col4, col5 = st.columns(2)
+                
+                with col4:
+                    st.markdown("**Before Lead In**")
+                    before_lead_in_dates = st.multiselect(
+                        "Select Before Lead In dates:",
                         options=available_dates,
-                        key="lead_out"
+                        default=before_lead_in_default,
+                        key="before_lead_in",
+                        help="Defaults to all dates before Lead In period. Tip: Hold Ctrl/Cmd to select multiple dates"
+                    )
+                
+                with col5:
+                    st.markdown("**After Lead Out**")
+                    after_lead_out_dates = st.multiselect(
+                        "Select After Lead Out dates:",
+                        options=available_dates,
+                        default=after_lead_out_default,
+                        key="after_lead_out",
+                        help="Defaults to all dates after Lead Out period. Tip: Hold Ctrl/Cmd to select multiple dates"
                     )
                 
                 # Display the table with color coding
@@ -159,6 +251,31 @@ def main():
                 st.dataframe(styled_table, use_container_width=True)
                 
                 # Display filtered tables if dates are selected
+                if before_lead_in_dates:
+                    st.header("📊 Before Lead In Period")
+                    before_lead_in_table = daily_table[before_lead_in_dates].copy()
+                    
+                    # Calculate summary and average rows
+                    period_data = combined_data[combined_data['date'].isin(before_lead_in_dates)]
+                    summary = calculator.calculate_summary_row(period_data)
+                    average = calculator.calculate_average_row(period_data)
+                    before_lead_in_table['TOTAL'] = summary
+                    before_lead_in_table['AVERAGE'] = average
+                    
+                    # Apply gray color to this table
+                    styled_before_lead_in = before_lead_in_table.style.set_properties(**{'background-color': "#D21616"})
+                    st.dataframe(styled_before_lead_in, use_container_width=True)
+                    
+                    # Download button
+                    csv = before_lead_in_table.to_csv()
+                    st.download_button(
+                        label="📄 Download Before Lead In CSV",
+                        data=csv,
+                        file_name=f"before_lead_in_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                        key="download_before_lead_in"
+                    )
+                
                 if lead_in_dates:
                     st.header("📊 Lead In Period")
                     lead_in_table = daily_table[lead_in_dates].copy()
@@ -234,21 +351,51 @@ def main():
                         key="download_lead_out"
                     )
                 
+                if after_lead_out_dates:
+                    st.header("📊 After Lead Out Period")
+                    after_lead_out_table = daily_table[after_lead_out_dates].copy()
+                    
+                    # Calculate summary and average rows
+                    period_data = combined_data[combined_data['date'].isin(after_lead_out_dates)]
+                    summary = calculator.calculate_summary_row(period_data)
+                    average = calculator.calculate_average_row(period_data)
+                    after_lead_out_table['TOTAL'] = summary
+                    after_lead_out_table['AVERAGE'] = average
+                    
+                    # Apply gray color to this table
+                    styled_after_lead_out = after_lead_out_table.style.set_properties(**{'background-color': '#D21616'})
+                    st.dataframe(styled_after_lead_out, use_container_width=True)
+                    
+                    # Download button
+                    csv = after_lead_out_table.to_csv()
+                    st.download_button(
+                        label="📄 Download After Lead Out CSV",
+                        data=csv,
+                        file_name=f"after_lead_out_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                        key="download_after_lead_out"
+                    )
+                
                 # Display Lift Analysis if at least 2 periods are selected
-                if sum([bool(lead_in_dates), bool(discount_dates), bool(lead_out_dates)]) >= 2:
+                selected_periods = {
+                    'Before Lead In': before_lead_in_dates,
+                    'Lead In': lead_in_dates,
+                    'Discount': discount_dates,
+                    'Lead Out': lead_out_dates,
+                    'After Lead Out': after_lead_out_dates
+                }
+                
+                num_selected = sum([bool(dates) for dates in selected_periods.values()])
+                
+                if num_selected >= 2:
                     st.header("📈 Lift Analysis")
                     
-                    # Collect raw average summaries
+                    # Collect raw average summaries for all selected periods
                     summaries_raw = {}
-                    if lead_in_dates:
-                        period_data = combined_data[combined_data['date'].isin(lead_in_dates)]
-                        summaries_raw['Lead In'] = calculator.calculate_average_row_raw(period_data)
-                    if discount_dates:
-                        period_data = combined_data[combined_data['date'].isin(discount_dates)]
-                        summaries_raw['Discount'] = calculator.calculate_average_row_raw(period_data)
-                    if lead_out_dates:
-                        period_data = combined_data[combined_data['date'].isin(lead_out_dates)]
-                        summaries_raw['Lead Out'] = calculator.calculate_average_row_raw(period_data)
+                    for period_name, dates in selected_periods.items():
+                        if dates:
+                            period_data = combined_data[combined_data['date'].isin(dates)]
+                            summaries_raw[period_name] = calculator.calculate_average_row_raw(period_data)
                     
                     # Calculate lift
                     lift_table = calculator.calculate_lift(summaries_raw)
