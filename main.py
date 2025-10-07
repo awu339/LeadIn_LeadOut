@@ -26,7 +26,7 @@ def process_files(_transaction_bytes, _sp_bytes, _sb_bytes, _sd_bytes, _file_has
 def main():
     st.set_page_config(
         page_title="BrandTogether Prime Day Analysis",
-        page_icon="bhutan",
+        page_icon="BT",
         layout="wide"
     )
     
@@ -214,23 +214,55 @@ def main():
                 
                 with col4:
                     st.markdown("**Before Lead In**")
-                    before_lead_in_dates = st.multiselect(
-                        "Select Before Lead In dates:",
-                        options=available_dates,
-                        default=before_lead_in_default,
-                        key="before_lead_in",
-                        help="Defaults to all dates before Lead In period. Tip: Hold Ctrl/Cmd to select multiple dates"
-                    )
+                    use_range_before = st.checkbox("Use date range selector", key="range_before")
+                    if use_range_before:
+                        before_range = st.date_input(
+                            "Select Before Lead In range:",
+                            value=[],
+                            min_value=min_date,
+                            max_value=max_date,
+                            key="before_lead_in_range"
+                        )
+                        if before_range:
+                            if isinstance(before_range, (list, tuple)) and len(before_range) == 2:
+                                before_lead_in_dates = [d for d in available_dates if before_range[0] <= d <= before_range[1]]
+                            else:
+                                before_lead_in_dates = [before_range] if before_range in available_dates else []
+                        else:
+                            before_lead_in_dates = []
+                    else:
+                        before_lead_in_dates = st.multiselect(
+                            "Select Before Lead In dates:",
+                            options=available_dates,
+                            default=before_lead_in_default,
+                            key="before_lead_in"
+                        )
                 
                 with col5:
                     st.markdown("**After Lead Out**")
-                    after_lead_out_dates = st.multiselect(
-                        "Select After Lead Out dates:",
-                        options=available_dates,
-                        default=after_lead_out_default,
-                        key="after_lead_out",
-                        help="Defaults to all dates after Lead Out period. Tip: Hold Ctrl/Cmd to select multiple dates"
-                    )
+                    use_range_after = st.checkbox("Use date range selector", key="range_after")
+                    if use_range_after:
+                        after_range = st.date_input(
+                            "Select After Lead Out range:",
+                            value=[],
+                            min_value=min_date,
+                            max_value=max_date,
+                            key="after_lead_out_range"
+                        )
+                        if after_range:
+                            if isinstance(after_range, (list, tuple)) and len(after_range) == 2:
+                                after_lead_out_dates = [d for d in available_dates if after_range[0] <= d <= after_range[1]]
+                            else:
+                                after_lead_out_dates = [after_range] if after_range in available_dates else []
+                        else:
+                            after_lead_out_dates = []
+                    else:
+                        after_lead_out_dates = st.multiselect(
+                            "Select After Lead Out dates:",
+                            options=available_dates,
+                            default=after_lead_out_default,
+                            key="after_lead_out"
+                        )
                 
                 # Display the table with color coding
                 st.header("📈 Daily Metrics Table")
@@ -263,7 +295,7 @@ def main():
                     before_lead_in_table['AVERAGE'] = average
                     
                     # Apply gray color to this table
-                    styled_before_lead_in = before_lead_in_table.style.set_properties(**{'background-color': "#D21616"})
+                    styled_before_lead_in = before_lead_in_table.style.set_properties(**{'background-color': '#D3D3D3'})
                     st.dataframe(styled_before_lead_in, use_container_width=True)
                     
                     # Download button
@@ -363,7 +395,7 @@ def main():
                     after_lead_out_table['AVERAGE'] = average
                     
                     # Apply gray color to this table
-                    styled_after_lead_out = after_lead_out_table.style.set_properties(**{'background-color': '#D21616'})
+                    styled_after_lead_out = after_lead_out_table.style.set_properties(**{'background-color': '#D3D3D3'})
                     st.dataframe(styled_after_lead_out, use_container_width=True)
                     
                     # Download button
@@ -397,37 +429,97 @@ def main():
                             period_data = combined_data[combined_data['date'].isin(dates)]
                             summaries_raw[period_name] = calculator.calculate_average_row_raw(period_data)
                     
-                    # Calculate lift
-                    lift_table = calculator.calculate_lift(summaries_raw)
+                    # Create dynamic comparison selector
+                    st.subheader("Select Comparisons")
+                    st.markdown("Choose which periods to compare (format: **Comparison Period → Baseline Period**)")
                     
-                    if not lift_table.empty:
-                        # Apply color styling to lift table
-                        def color_lift_values(val):
-                            """Color positive values green and negative values red"""
-                            if isinstance(val, str) and val != "N/A":
-                                # Extract the numeric value
-                                try:
-                                    numeric_val = float(val.replace('%', '').replace('+', ''))
-                                    if numeric_val > 0:
-                                        return 'background-color: #28a745'  # Darker green
-                                    elif numeric_val < 0:
-                                        return 'background-color: #dc3545'  # Darker red
-                                except:
-                                    pass
-                            return ''
+                    available_periods = list(summaries_raw.keys())
+                    
+                    # Number of comparisons
+                    num_comparisons = st.number_input(
+                        "Number of comparisons:",
+                        min_value=1,
+                        max_value=10,
+                        value=3,
+                        help="How many period comparisons do you want to analyze?"
+                    )
+                    
+                    # Collect comparison selections
+                    comparisons = []
+                    comparison_cols = st.columns(min(num_comparisons, 3))
+                    
+                    for i in range(num_comparisons):
+                        col_idx = i % len(comparison_cols)
+                        with comparison_cols[col_idx]:
+                            st.markdown(f"**Comparison {i+1}**")
+                            
+                            baseline = st.selectbox(
+                                "Baseline:",
+                                options=available_periods,
+                                key=f"baseline_{i}",
+                                help="The period to compare against"
+                            )
+                            
+                            comparison = st.selectbox(
+                                "Compare to:",
+                                options=available_periods,
+                                key=f"comparison_{i}",
+                                help="The period being evaluated"
+                            )
+                            
+                            if baseline != comparison:
+                                comparisons.append({
+                                    'name': f"{comparison} → {baseline}",
+                                    'baseline': baseline,
+                                    'comparison': comparison
+                                })
+                    
+                    # Calculate lift for selected comparisons
+                    if comparisons:
+                        lift_data = {}
+                        for comp in comparisons:
+                            if comp['baseline'] in summaries_raw and comp['comparison'] in summaries_raw:
+                                lift_data[comp['name']] = calculator._calculate_lift_column(
+                                    summaries_raw[comp['baseline']],
+                                    summaries_raw[comp['comparison']]
+                                )
                         
-                        styled_lift = lift_table.style.applymap(color_lift_values)
-                        st.dataframe(styled_lift, use_container_width=True)
-                        
-                        # Download button for lift analysis
-                        csv = lift_table.to_csv()
-                        st.download_button(
-                            label="📄 Download Lift Analysis CSV",
-                            data=csv,
-                            file_name=f"lift_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                            mime="text/csv",
-                            key="download_lift"
-                        )
+                        if lift_data:
+                            lift_table = pd.DataFrame(lift_data)
+                        if lift_data:
+                            lift_table = pd.DataFrame(lift_data)
+                            
+                            # Apply color styling to lift table
+                            def color_lift_values(val):
+                                """Color positive values green and negative values red"""
+                                if isinstance(val, str) and val != "N/A":
+                                    # Extract the numeric value
+                                    try:
+                                        numeric_val = float(val.replace('%', '').replace('+', ''))
+                                        if numeric_val > 0:
+                                            return 'background-color: #28a745'  # Darker green
+                                        elif numeric_val < 0:
+                                            return 'background-color: #dc3545'  # Darker red
+                                    except:
+                                        pass
+                                return ''
+                            
+                            styled_lift = lift_table.style.applymap(color_lift_values)
+                            st.dataframe(styled_lift, use_container_width=True)
+                            
+                            # Download button for lift analysis
+                            csv = lift_table.to_csv()
+                            st.download_button(
+                                label="📄 Download Lift Analysis CSV",
+                                data=csv,
+                                file_name=f"lift_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                mime="text/csv",
+                                key="download_lift"
+                            )
+                        else:
+                            st.info("Please select valid period comparisons.")
+                    else:
+                        st.info("Please configure at least one comparison above.")
         
         except Exception as e:
             st.error(f"Error processing data: {str(e)}")
